@@ -81,7 +81,8 @@ export class AttemptCompletionHandler implements IToolHandler, IPartialBlockHand
 					"3. Edge cases and error handling are addressed\n" +
 					"4. The solution matches what was asked for, not just what was convenient\n" +
 					"5. Output files contain exactly what was specified--no extra columns, fields, debug output, or commentary\n" +
-					"6. If the task specifies numerical thresholds or accuracy targets, verify your result meets the criteria. If close but not passing, iterate rather than declaring completion" +
+					"6. If the task specifies numerical thresholds or accuracy targets, verify your result meets the criteria. If close but not passing, iterate rather than declaring completion\n" +
+					"7. Run focused verification before completion: execute the smallest relevant test(s) for the files/behavior you changed (for benchmark tasks, prioritize the known failing/repro test first)." +
 					taskSection +
 					"\n\nIf everything checks out, call attempt_completion again with your final result.",
 			)
