@@ -3,6 +3,8 @@ import type { Message as SdkMessage } from "@cline/llms"
 import { type ContentBlock, formatDisplayUserInput, type MessageWithMetadata } from "@cline/shared"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"
+import getFolderSize from "get-folder-size"
+import path from "path"
 import type { McpHub } from "@/services/mcp/McpHub"
 import { Logger } from "@/shared/services/Logger"
 import { buildSessionConfig } from "./cline-session-factory"
@@ -451,11 +453,14 @@ export class SdkTaskHistory {
 	private async updateSession(sessionId: string, item: HistoryItem): Promise<void> {
 		await this.withHistoryHost(async (host) => {
 			const existing = await host.get(sessionId)
+			const size = await this.resolveTaskSize(item, existing as SessionHistoryRecord | undefined, {
+				refreshArtifactSize: true,
+			})
 			const metadata = {
 				...(existing?.metadata ?? {}),
 				title: item.task,
 				isFavorited: item.isFavorited ?? false,
-				size: item.size ?? 0,
+				size,
 				totalCost: item.totalCost ?? 0,
 				tokensIn: item.tokensIn ?? 0,
 				tokensOut: item.tokensOut ?? 0,
@@ -480,9 +485,19 @@ export class SdkTaskHistory {
 	}
 
 	async findHistoryItem(taskId: string): Promise<HistoryItem | undefined> {
-		const sdkRecord = await this.withHistoryHost((host) => host.get(taskId))
-		if (sdkRecord && sdkRecord.isSubagent !== true) {
-			return sessionHistoryRecordToHistoryItem(sdkRecord as SessionHistoryRecord)
+		const sdkHistoryItem = await this.withHistoryHost(async (host) => {
+			const sdkRecord = await host.get(taskId)
+			if (!sdkRecord || sdkRecord.isSubagent === true) {
+				return undefined
+			}
+
+			const historyItem = sessionHistoryRecordToHistoryItem(sdkRecord as SessionHistoryRecord)
+			historyItem.size = await this.resolveTaskSize(historyItem, sdkRecord as SessionHistoryRecord)
+			await this.persistResolvedTaskSize(host, sdkRecord as SessionHistoryRecord, historyItem.size)
+			return historyItem
+		})
+		if (sdkHistoryItem) {
+			return sdkHistoryItem
 		}
 
 		const legacyItem = readTaskHistory().find((item) => item.id === taskId)
@@ -549,5 +564,67 @@ export class SdkTaskHistory {
 		historyItem.ts = Date.now()
 
 		await this.updateTaskHistoryItem(historyItem)
+	}
+
+	private async resolveTaskSize(
+		item: HistoryItem,
+		record?: SessionHistoryRecord,
+		options: { refreshArtifactSize?: boolean } = {},
+	): Promise<number> {
+		if (options.refreshArtifactSize) {
+			const artifactSize = record ? await this.getSessionArtifactSize(record) : undefined
+			if (artifactSize !== undefined) {
+				return artifactSize
+			}
+		}
+
+		if (typeof item.size === "number" && Number.isFinite(item.size) && item.size > 0) {
+			return item.size
+		}
+
+		const metadataSize = metadataNumber(record?.metadata, "size")
+		if (metadataSize !== undefined && metadataSize > 0) {
+			return metadataSize
+		}
+
+		const artifactSize = record ? await this.getSessionArtifactSize(record) : undefined
+		if (artifactSize !== undefined) {
+			return artifactSize
+		}
+
+		return item.size ?? metadataSize ?? 0
+	}
+
+	private async getSessionArtifactSize(record: SessionHistoryRecord): Promise<number | undefined> {
+		const messagesPath = typeof record.messagesPath === "string" ? record.messagesPath.trim() : ""
+		if (!messagesPath) {
+			return undefined
+		}
+
+		try {
+			const size = await getFolderSize.loose(path.dirname(messagesPath), { bigint: false })
+			return Number.isFinite(size) ? size : undefined
+		} catch (error) {
+			Logger.warn(`[SdkTaskHistory] Failed to calculate SDK session size: ${record.sessionId}`, error)
+			return undefined
+		}
+	}
+
+	private async persistResolvedTaskSize(
+		host: VscodeSessionHost,
+		record: SessionHistoryRecord,
+		size: number | undefined,
+	): Promise<void> {
+		if (size === undefined || size <= 0 || metadataNumber(record.metadata, "size") === size) {
+			return
+		}
+
+		await host.update(record.sessionId, {
+			metadata: {
+				...(record.metadata ?? {}),
+				size,
+			},
+		})
+		this.invalidateMetadataHistoryCache()
 	}
 }
