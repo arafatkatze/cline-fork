@@ -3,8 +3,15 @@ import type { Llms } from "@cline/core";
 import type { ChoiceContext } from "@opentui-ui/dialog";
 import { useDialogKeyboard } from "@opentui-ui/dialog/react";
 import { useMemo, useState } from "react";
+import {
+	getThinkingLevelOptions,
+	type ThinkingLevel,
+	type ThinkingLevelOption,
+} from "../../../utils/thinking-levels";
 import { palette } from "../../palette";
 import { ProviderRow } from "./provider-row";
+
+export type { ThinkingLevel } from "../../../utils/thinking-levels";
 
 export interface ModelOption {
 	key: string;
@@ -12,6 +19,7 @@ export interface ModelOption {
 	maxInputTokens?: number;
 	family?: string;
 	supportsReasoning: boolean;
+	thinkingLevels: readonly ThinkingLevelOption[];
 }
 
 const MAX_VISIBLE = 10;
@@ -310,28 +318,19 @@ export function ModelSelectorContent(
 
 // -- Thinking level dialog content --
 
-export type ThinkingLevel = "none" | "low" | "medium" | "high" | "xhigh";
-
-const THINKING_LEVELS: { value: ThinkingLevel; label: string; desc: string }[] =
-	[
-		{ value: "none", label: "Off", desc: "No extended thinking" },
-		{ value: "low", label: "Low", desc: "Minimal reasoning" },
-		{ value: "medium", label: "Medium", desc: "Balanced reasoning" },
-		{ value: "high", label: "High", desc: "Deep reasoning" },
-		{ value: "xhigh", label: "Extra High", desc: "Maximum reasoning" },
-	];
-
 export function ThinkingLevelContent(
 	props: ChoiceContext<ThinkingLevel> & {
 		modelName: string;
-		currentLevel: ThinkingLevel;
+		currentLevel?: ThinkingLevel;
+		levels: readonly ThinkingLevelOption[];
 	},
 ) {
-	const { resolve, dismiss, dialogId, modelName, currentLevel } = props;
-	const [selected, setSelected] = useState(() => {
-		const initialLevel = currentLevel === "none" ? "medium" : currentLevel;
-		const idx = THINKING_LEVELS.findIndex((l) => l.value === initialLevel);
-		return idx >= 0 ? idx : 0;
+	const { resolve, dismiss, dialogId, modelName, currentLevel, levels } = props;
+	const [selected, setSelected] = useState<number | undefined>(() => {
+		const idx = levels.findIndex((level) => level.value === currentLevel);
+		// If thinking is disabled but the model has no advertised "off" control,
+		// require an explicit navigation or click before enabling it.
+		return idx >= 0 ? idx : undefined;
 	});
 
 	useDialogKeyboard((key) => {
@@ -340,16 +339,20 @@ export function ThinkingLevelContent(
 			return;
 		}
 		if (key.name === "return" || key.name === "enter") {
-			const level = THINKING_LEVELS[selected];
+			const level = selected === undefined ? undefined : levels[selected];
 			if (level) resolve(level.value);
 			return;
 		}
 		if (key.name === "up" || (key.ctrl && key.name === "p")) {
-			setSelected((s) => (s <= 0 ? THINKING_LEVELS.length - 1 : s - 1));
+			setSelected((s) =>
+				s === undefined || s <= 0 ? levels.length - 1 : s - 1,
+			);
 			return;
 		}
 		if (key.name === "down" || (key.ctrl && key.name === "n")) {
-			setSelected((s) => (s >= THINKING_LEVELS.length - 1 ? 0 : s + 1));
+			setSelected((s) =>
+				s === undefined || s >= levels.length - 1 ? 0 : s + 1,
+			);
 			return;
 		}
 	}, dialogId);
@@ -359,7 +362,7 @@ export function ThinkingLevelContent(
 			<text>Thinking Level for {modelName}</text>
 
 			<box flexDirection="column">
-				{THINKING_LEVELS.map((level, i) => (
+				{levels.map((level, i) => (
 					<box
 						key={level.value}
 						paddingX={1}
@@ -599,12 +602,21 @@ export function buildModelOptions(
 ): ModelOption[] {
 	if (!knownModels) return [];
 	return Object.entries(knownModels)
-		.map(([key, info]) => ({
-			key,
-			name: info.name ?? key,
-			maxInputTokens: info.maxInputTokens ?? info.contextWindow,
-			family: info.family,
-			supportsReasoning: info.capabilities?.includes("reasoning") ?? false,
-		}))
+		.map(([key, info]) => {
+			const hasReasoningCapability =
+				info.capabilities?.includes("reasoning") ?? false;
+			const thinkingLevels = getThinkingLevelOptions(
+				info.reasoningOptions,
+				hasReasoningCapability,
+			);
+			return {
+				key,
+				name: info.name ?? key,
+				maxInputTokens: info.maxInputTokens ?? info.contextWindow,
+				family: info.family,
+				supportsReasoning: thinkingLevels.length > 0,
+				thinkingLevels,
+			};
+		})
 		.sort((a, b) => a.name.localeCompare(b.name));
 }

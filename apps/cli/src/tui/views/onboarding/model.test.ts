@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { THINKING_LEVELS } from "../../../utils/thinking-levels";
 import {
 	getMainMenuOptions,
 	getOAuthProviderLabel,
@@ -87,6 +88,7 @@ describe("onboarding model helpers", () => {
 			id: "anthropic/claude-sonnet-4.6",
 			name: "anthropic/claude-sonnet-4.6",
 			supportsReasoning: false,
+			thinkingLevels: [],
 		});
 
 		expect(
@@ -99,6 +101,7 @@ describe("onboarding model helpers", () => {
 			id: "openai/gpt-5.3-codex",
 			name: "GPT-5.3 Codex",
 			supportsReasoning: true,
+			thinkingLevels: THINKING_LEVELS,
 		});
 	});
 
@@ -112,6 +115,9 @@ describe("onboarding model helpers", () => {
 				"gpt-5.3-codex": {
 					name: "GPT-5.3 Codex",
 					capabilities: ["tools", "reasoning"],
+					reasoningOptions: [
+						{ type: "effort", values: ["low", "medium", "high"] },
+					],
 				},
 			}),
 		).toEqual([
@@ -119,11 +125,15 @@ describe("onboarding model helpers", () => {
 				id: "gpt-5.2",
 				name: "GPT-5.2",
 				supportsReasoning: false,
+				thinkingLevels: [],
 			},
 			{
 				id: "gpt-5.3-codex",
 				name: "GPT-5.3 Codex",
 				supportsReasoning: true,
+				thinkingLevels: THINKING_LEVELS.filter((level) =>
+					["low", "medium", "high"].includes(level.value),
+				),
 			},
 		]);
 	});

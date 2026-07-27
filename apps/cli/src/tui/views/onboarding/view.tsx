@@ -178,6 +178,7 @@ export function OnboardingView(props: OnboardingViewProps) {
 				mouse={mouse}
 				selectedModelName={state.selectedModelName}
 				thinkingSelected={state.thinkingSelected}
+				thinkingLevelOptions={state.thinkingLevelOptions}
 			/>
 		);
 	}

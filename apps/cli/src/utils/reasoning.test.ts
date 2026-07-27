@@ -75,7 +75,19 @@ describe("resolveCliReasoning", () => {
 		});
 	});
 
-	it("uses medium effort when persisted reasoning is enabled without an effort", () => {
+	it("preserves persisted maximum effort", () => {
+		expect(
+			resolveCliReasoning({
+				thinking: false,
+				persistedReasoning: { enabled: true, effort: "max" },
+			}),
+		).toEqual({
+			thinking: true,
+			reasoningEffort: "max",
+		});
+	});
+
+	it("preserves automatic reasoning when enabled without an effort", () => {
 		expect(
 			resolveCliReasoning({
 				thinking: false,
@@ -83,7 +95,7 @@ describe("resolveCliReasoning", () => {
 			}),
 		).toEqual({
 			thinking: true,
-			reasoningEffort: "medium",
+			reasoningEffort: undefined,
 		});
 	});
 });

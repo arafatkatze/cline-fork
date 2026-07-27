@@ -60,13 +60,16 @@ import {
 	type ClinePassSubscriptionStatus,
 	DEFAULT_THINKING_LEVEL_INDEX,
 	getMainMenuOptions,
+	type KnownModelInfo,
 	type ModelEntry,
 	type OnboardingResult,
 	type OnboardingStep,
 	type ProviderEntry,
 	type ReasoningEffort,
 	shouldUseFeaturedClineModelPicker,
+	THINKING_LEVELS,
 	type ThinkingLevel,
+	type ThinkingLevelOption,
 	toModelEntriesFromKnownModels,
 	toModelEntry,
 	toProviderEntry,
@@ -220,7 +223,7 @@ export function useOnboardingController(props: OnboardingControllerProps) {
 		Set<string>
 	>(new Set());
 	const [clineKnownModels, setClineKnownModels] = useState<
-		Record<string, unknown> | undefined
+		Record<string, KnownModelInfo> | undefined
 	>(undefined);
 
 	useEffect(() => {
@@ -242,7 +245,11 @@ export function useOnboardingController(props: OnboardingControllerProps) {
 		});
 		void Promise.allSettled(
 			["cline", "cline-pass"].map((providerId) =>
-				resolveProviderConfig(providerId),
+				resolveProviderConfig(providerId, {
+					loadLatestOnInit: true,
+					loadPrivateOnAuth: true,
+					failOnError: false,
+				}),
 			),
 		).then((results) => {
 			const merged: Record<string, unknown> = {};
@@ -252,7 +259,7 @@ export function useOnboardingController(props: OnboardingControllerProps) {
 				}
 			}
 			if (Object.keys(merged).length > 0) {
-				setClineKnownModels(merged);
+				setClineKnownModels(merged as Record<string, KnownModelInfo>);
 			}
 		});
 	}, []);
@@ -261,6 +268,9 @@ export function useOnboardingController(props: OnboardingControllerProps) {
 	const [thinkingSelected, setThinkingSelected] = useState(
 		DEFAULT_THINKING_LEVEL_INDEX,
 	);
+	const [thinkingLevelOptions, setThinkingLevelOptions] = useState<
+		readonly ThinkingLevelOption[]
+	>([]);
 	const [selectedModelName, setSelectedModelName] = useState("");
 	const [selectedModelId, setSelectedModelId] = useState("");
 	const [selectedThinking, setSelectedThinking] = useState(false);
@@ -664,7 +674,11 @@ export function useOnboardingController(props: OnboardingControllerProps) {
 			const entry = modelEntries.find((m) => m.id === modelId);
 			if (entry?.supportsReasoning) {
 				setSelectedModelName(entry.name);
-				setThinkingSelected(DEFAULT_THINKING_LEVEL_INDEX);
+				setThinkingLevelOptions(entry.thinkingLevels);
+				const defaultIndex = entry.thinkingLevels.findIndex(
+					(level) => level.value === "medium",
+				);
+				setThinkingSelected(defaultIndex >= 0 ? defaultIndex : 0);
 				setStep("thinking_level");
 			} else {
 				setStep("done");
@@ -714,13 +728,30 @@ export function useOnboardingController(props: OnboardingControllerProps) {
 			setSelectedModelId(modelId);
 			if (clineModelReasoningIds.has(modelId)) {
 				setSelectedModelName(modelName);
-				setThinkingSelected(DEFAULT_THINKING_LEVEL_INDEX);
+				const entry = toModelEntriesFromKnownModels(clineKnownModels).find(
+					(model) => model.id === modelId,
+				);
+				if (entry && !entry.supportsReasoning) {
+					setStep("done");
+					return;
+				}
+				const thinkingLevels = entry?.thinkingLevels ?? THINKING_LEVELS;
+				setThinkingLevelOptions(thinkingLevels);
+				const defaultIndex = thinkingLevels.findIndex(
+					(level) => level.value === "medium",
+				);
+				setThinkingSelected(defaultIndex >= 0 ? defaultIndex : 0);
 				setStep("thinking_level");
 			} else {
 				setStep("done");
 			}
 		},
-		[activeProviderId, clineModelReasoningIds, providerSettingsManager],
+		[
+			activeProviderId,
+			clineKnownModels,
+			clineModelReasoningIds,
+			providerSettingsManager,
+		],
 	);
 
 	const saveThinkingLevel = useCallback(
@@ -737,10 +768,13 @@ export function useOnboardingController(props: OnboardingControllerProps) {
 			} else {
 				providerSettingsManager.saveProviderSettings({
 					...(existing ?? { provider: activeProviderId }),
-					reasoning: { enabled: true, effort: level },
+					reasoning: {
+						enabled: true,
+						...(level === "auto" ? {} : { effort: level }),
+					},
 				});
 				setSelectedThinking(true);
-				setSelectedReasoningEffort(level);
+				setSelectedReasoningEffort(level === "auto" ? undefined : level);
 			}
 			setStep("done");
 		},
@@ -786,6 +820,7 @@ export function useOnboardingController(props: OnboardingControllerProps) {
 		clinePassSubscriptionOptions: CLINE_PASS_SUBSCRIPTION_OPTIONS,
 		clinePassSubscriptionSelected,
 		thinkingSelected,
+		thinkingLevelOptions,
 		setStep,
 		setMenuSelected,
 		resetByoFields: () => {
@@ -881,5 +916,6 @@ export function useOnboardingController(props: OnboardingControllerProps) {
 		selectedModelName,
 		step,
 		thinkingSelected,
+		thinkingLevelOptions,
 	};
 }

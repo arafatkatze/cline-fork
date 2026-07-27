@@ -25,11 +25,11 @@ import {
 } from "../../hooks/use-terminal-background";
 import { getDefaultForeground, getModeAccent, palette } from "../../palette";
 import { FIELD_ORDER } from "./fields";
-import {
-	type ClinePassSubscriptionOption,
-	type ClinePassSubscriptionStatus,
-	type MenuOption,
-	THINKING_LEVELS,
+import type {
+	ClinePassSubscriptionOption,
+	ClinePassSubscriptionStatus,
+	MenuOption,
+	ThinkingLevelOption,
 } from "./model";
 
 type MouseTrackerState = ReturnType<typeof useMouseTracker>;
@@ -786,6 +786,7 @@ export function OnboardingThinkingLevelScreen(props: {
 	mouse: MouseTrackerState;
 	selectedModelName: string;
 	thinkingSelected: number;
+	thinkingLevelOptions: readonly ThinkingLevelOption[];
 }) {
 	const defaultFg = useDefaultFg();
 	return (
@@ -802,7 +803,7 @@ export function OnboardingThinkingLevelScreen(props: {
 			</text>
 
 			<box flexDirection="column">
-				{THINKING_LEVELS.map((level, i) => {
+				{props.thinkingLevelOptions.map((level, i) => {
 					const isSel = i === props.thinkingSelected;
 					return (
 						<box

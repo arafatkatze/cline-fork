@@ -1,5 +1,19 @@
+import type { ModelReasoningOption } from "@cline/shared";
 import { isOpenAICodexCliProvider } from "../../../utils/codex-cli";
 import { isOAuthProvider } from "../../../utils/provider-auth";
+import {
+	getThinkingLevelOptions,
+	type ReasoningEffort,
+	THINKING_LEVELS,
+	type ThinkingLevelOption,
+} from "../../../utils/thinking-levels";
+
+export {
+	type ReasoningEffort,
+	THINKING_LEVELS,
+	type ThinkingLevel,
+	type ThinkingLevelOption,
+} from "../../../utils/thinking-levels";
 
 export type OnboardingStep =
 	| "menu"
@@ -14,21 +28,6 @@ export type OnboardingStep =
 	| "custom_model_id"
 	| "thinking_level"
 	| "done";
-
-export type ThinkingLevel = "none" | "low" | "medium" | "high" | "xhigh";
-export type ReasoningEffort = Exclude<ThinkingLevel, "none">;
-
-export const THINKING_LEVELS: {
-	value: ThinkingLevel;
-	label: string;
-	desc: string;
-}[] = [
-	{ value: "none", label: "Off", desc: "No extended thinking" },
-	{ value: "low", label: "Low", desc: "Minimal reasoning" },
-	{ value: "medium", label: "Medium", desc: "Balanced reasoning" },
-	{ value: "high", label: "High", desc: "Deep reasoning" },
-	{ value: "xhigh", label: "Extra High", desc: "Maximum reasoning" },
-];
 
 export const DEFAULT_THINKING_LEVEL_INDEX = THINKING_LEVELS.findIndex(
 	(l) => l.value === "medium",
@@ -129,6 +128,7 @@ export interface ModelEntry {
 	id: string;
 	name: string;
 	supportsReasoning: boolean;
+	thinkingLevels: readonly ThinkingLevelOption[];
 }
 
 export type ClinePassSubscriptionStatus =
@@ -151,11 +151,13 @@ export interface ProviderModelItem {
 	id: string;
 	name?: string;
 	supportsReasoning?: boolean;
+	reasoningOptions?: readonly ModelReasoningOption[];
 }
 
 export interface KnownModelInfo {
 	name?: string;
 	capabilities?: string[];
+	reasoningOptions?: readonly ModelReasoningOption[];
 }
 
 export function toProviderEntry(provider: ProviderCatalogItem): ProviderEntry {
@@ -173,10 +175,15 @@ export function toProviderEntry(provider: ProviderCatalogItem): ProviderEntry {
 }
 
 export function toModelEntry(model: ProviderModelItem): ModelEntry {
+	const thinkingLevels = getThinkingLevelOptions(
+		model.reasoningOptions,
+		model.supportsReasoning === true,
+	);
 	return {
 		id: model.id,
 		name: model.name || model.id,
-		supportsReasoning: model.supportsReasoning === true,
+		supportsReasoning: thinkingLevels.length > 0,
+		thinkingLevels,
 	};
 }
 
@@ -185,11 +192,18 @@ export function toModelEntriesFromKnownModels(
 ): ModelEntry[] {
 	if (!knownModels) return [];
 	return Object.entries(knownModels)
-		.map(([id, info]) => ({
-			id,
-			name: info.name || id,
-			supportsReasoning: info.capabilities?.includes("reasoning") ?? false,
-		}))
+		.map(([id, info]) => {
+			const thinkingLevels = getThinkingLevelOptions(
+				info.reasoningOptions,
+				info.capabilities?.includes("reasoning") ?? false,
+			);
+			return {
+				id,
+				name: info.name || id,
+				supportsReasoning: thinkingLevels.length > 0,
+				thinkingLevels,
+			};
+		})
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
 

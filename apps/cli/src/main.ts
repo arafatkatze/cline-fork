@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { basename } from "node:path";
 import type { ToolPolicy } from "@cline/core";
 
-import { registerDisposable } from "@cline/shared";
+import { REASONING_LEVELS, registerDisposable } from "@cline/shared";
 import type { Command } from "commander";
 import {
 	CommanderError,
@@ -802,7 +802,7 @@ export async function runCli(): Promise<void> {
 
 	if (args.invalidThinkingLevel) {
 		writeErr(
-			`invalid thinking level "${args.invalidThinkingLevel}" (expected "none", "low", "medium", "high", or "xhigh")`,
+			`invalid thinking level "${args.invalidThinkingLevel}" (expected ${REASONING_LEVELS.map((level, index) => `${index === REASONING_LEVELS.length - 1 ? "or " : ""}"${level}"`).join(", ")})`,
 		);
 		process.exitCode = 1;
 		return;
